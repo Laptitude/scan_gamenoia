@@ -1,3 +1,11 @@
+// Importation depuis un autre réseau de distribution plus stable en cas de timeout
+import { pipeline, env } from 'https://unpkg.com';
+
+// Forcer l'utilisation des modèles distants hébergés sur les serveurs publics de Hugging Face
+env.allowLocalModels = false;
+env.remoteObjectURL = 'https://huggingface.co';
+
+
 // Importation du modèle de vision CLIP depuis un CDN gratuit
 import { pipeline, env } from 'https://jsdelivr.net';
 
