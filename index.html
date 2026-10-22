@@ -3,105 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reconnaissance de Jeu Vidéo (100% Gratuit)</title>
+    <title>Reconnaissance de Jeux Vidéo Universelle</title>
     <style>
-        body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; text-align: center; }
-        #preview { max-width: 100%; max-height: 300px; margin-top: 20px; display: none; }
-        #status { font-weight: bold; margin-top: 20px; color: #555; }
-        #result { font-size: 24px; font-weight: bold; color: #007bff; margin-top: 10px; }
+        :root { --primary: #6366f1; --bg: #0f172a; --card: #1e293b; --text: #f8fafc; }
+        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); max-width: 700px; margin: 0 auto; padding: 20px; text-align: center; }
+        h1 { font-size: 2.5rem; margin-bottom: 5px; color: #a5b4fc; }
+        .subtitle { color: #94a3b8; margin-bottom: 30px; }
+        #drop-zone { border: 3px dashed #475569; background: var(--card); padding: 40px 20px; border-radius: 12px; cursor: pointer; transition: 0.3s; position: relative; }
+        #drop-zone.hover { border-color: var(--primary); background: #1e293bba; }
+        #fileInput { display: none; }
+        #preview { max-width: 100%; max-height: 250px; border-radius: 8px; margin-top: 15px; display: none; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5); }
+        #status { margin: 20px 0; font-size: 1.1rem; color: #cbd5e1; font-weight: 500; }
+        .result-container { background: var(--card); padding: 20px; border-radius: 12px; text-align: left; margin-top: 20px; display: none; }
+        .game-row { margin-bottom: 15px; }
+        .game-name { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 5px; }
+        .progress-bar { background: #334155; height: 12px; border-radius: 6px; overflow: hidden; }
+        .progress-fill { background: linear-gradient(90deg, #4f46e5, #818cf8); height: 100%; width: 0%; transition: width 0.6s ease; }
+        .loader { display: inline-block; width: 20px; height: 20px; border: 3px solid #f3f3f3; border-top: 3px solid var(--primary); border-radius: 50%; animation: spin 1s linear infinite; vertical-align: middle; margin-right: 10px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
 
     <h1>Quel est ce jeu ?</h1>
-    <p>Sélectionnez une capture d'écran pour l'analyser localement sans aucune limite.</p>
+    <p class="subtitle">Identifiez n'importe quelle capture d'écran localement, gratuitement et sans limite.</p>
 
-    <!-- Zone de dépôt de fichier -->
-    <input type="file" id="imageInput" accept="image/*">
-    <br>
-    <img id="preview" alt="Aperçu de la capture d'écran">
+    <!-- Zone de téléversement -->
+    <div id="drop-zone">
+        <p>Glissez-déposez votre capture d'écran ici ou <strong>cliquez pour parcourir</strong></p>
+        <input type="file" id="fileInput" accept="image/*">
+        <img id="preview" alt="Aperçu">
+    </div>
 
-    <!-- Indicateurs d'état -->
-    <div id="status">Initialisation de l'IA (veuillez patienter)...</div>
-    <div id="result"></div>
+    <!-- Statut d'avancement -->
+    <div id="status"><span class="loader"></span>Initialisation de l'application...</div>
 
-    <!-- Script principal de l'IA -->
+    <!-- Zone des résultats -->
+    <div id="results" class="result-container">
+        <h3 style="margin-top:0; color:#cbd5e1;">Résultats de la détection :</h3>
+        <div id="rows-wrapper"></div>
+    </div>
+
     <script type="module">
-        // Importation du modèle d'IA CLIP en JavaScript depuis un CDN gratuit
-        import { pipeline } from 'https://jsdelivr.net';
+        import { initIA, analyserImage } from './app.js';
 
-        let classifier;
-        const statusDiv = document.getElementById('status');
-        const resultDiv = document.getElementById('result');
-        const imageInput = document.getElementById('imageInput');
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('fileInput');
         const preview = document.getElementById('preview');
+        const statusText = document.getElementById('status');
+        const resultsDiv = document.getElementById('results');
+        const rowsWrapper = document.getElementById('rows-wrapper');
 
-        // 1. Définissez la liste des jeux que votre IA doit être capable de reconnaître
-        const listeJeux = [
-            'Minecraft',
-            'Grand Theft Auto V',
-            'The Legend of Zelda: Breath of the Wild',
-            'Elden Ring',
-            'Fortnite',
-            'Cyberpunk 2077',
-            'Super Mario Odyssey',
-            'Red Dead Redemption 2'
-        ];
-
-        // 2. Charger le modèle au démarrage de la page
-        async function initIA() {
-            try {
-                // Utilisation du modèle CLIP léger optimisé pour le web
-                classifier = await pipeline('zero-shot-image-classification', 'Xenova/clip-vit-base-patch32');
-                statusDiv.innerText = "Prêt ! Choisissez une image.";
-            } catch (error) {
-                statusDiv.innerText = "Erreur lors du chargement de l'IA : " + error.message;
-            }
+        // Mettre à jour l'affichage textuel du statut
+        function updateStatus(message, showLoader = true) {
+            statusText.innerHTML = showLoader ? `<span class="loader"></span>${message}` : message;
         }
 
-        // 3. Gérer l'analyse quand l'utilisateur charge une photo
-        imageInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
+        // Démarrage de l'application
+        initIA(updateStatus);
 
-            // Afficher l'image à l'écran
+        // Gestion du clic sur la zone
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        // Drag & Drop animations
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => { e.preventDefault(); dropZone.classList.add('hover'); }, false);
+        });
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => { e.preventDefault(); dropZone.classList.remove('hover'); }, false);
+        });
+
+        // Capture du fichier déposé ou sélectionné
+        dropZone.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files));
+        fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+        function handleFiles(files) {
+            if (files.length === 0) return;
+            const file = files[0];
+            
             const reader = new FileReader();
             reader.onload = function(event) {
                 preview.src = event.target.result;
                 preview.style.display = 'inline-block';
-                analyserImage(event.target.result);
-            }
+                process(event.target.result);
+            };
             reader.readAsDataURL(file);
-        });
+        }
 
-        // 4. Lancer la reconnaissance de l'image
-        async function analyserImage(imageSrc) {
-            if (!classifier) {
-                alert("L'IA n'est pas encore prête.");
+        // Lancement du calcul et affichage
+        async function process(imageSrc) {
+            resultsDiv.style.display = 'none';
+            
+            const topResults = await analyserImage(imageSrc, (msg) => updateStatus(msg, true));
+            
+            if (!topResults) {
+                updateStatus("Erreur lors de l'analyse.", false);
                 return;
             }
 
-            statusDiv.innerText = "Analyse de l'image en cours (calcul local)...";
-            resultDiv.innerText = "";
+            updateStatus("Analyse terminée !", false);
+            rowsWrapper.innerHTML = '';
+            resultsDiv.style.display = 'block';
 
-            try {
-                // L'IA compare l'image avec votre liste de jeux
-                const output = await classifier(imageSrc, listeJeux);
+            topResults.forEach(jeu => {
+                // Conversion du score en pourcentage visible (ajusté pour la similarité CLIP)
+                const pourcentage = Math.max(0, Math.min(100, (jeu.score * 100))).toFixed(1);
                 
-                // Récupérer le meilleur résultat
-                const topResult = output[0];
-                const scorePourcentage = (topResult.score * 100).toFixed(1);
-
-                statusDiv.innerText = "Analyse terminée !";
-                resultDiv.innerText = `${topResult.label} (${scorePourcentage}%)`;
-            } catch (error) {
-                statusDiv.innerText = "Erreur pendant l'analyse.";
-                resultDiv.innerText = error.message;
-            }
+                const row = document.createElement('div');
+                row.className = 'game-row';
+                row.innerHTML = `
+                    <div class="game-name"><span>${jeu.nom}</span><span>${pourcentage}%</span></div>
+                    <div class="progress-bar"><div class="progress-fill" style="width: ${pourcentage}%"></div></div>
+                `;
+                rowsWrapper.appendChild(row);
+            });
         }
-
-        // Lancement initial
-        initIA();
     </script>
 </body>
 </html>
