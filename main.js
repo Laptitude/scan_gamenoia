@@ -7,32 +7,38 @@ const statusText = document.getElementById('status');
 const resultsDiv = document.getElementById('results');
 const rowsWrapper = document.getElementById('rows-wrapper');
 
-// Mettre à jour l'affichage textuel du statut
 function updateStatus(message, showLoader = true) {
     statusText.innerHTML = showLoader ? `<span class="loader"></span>${message}` : message;
 }
 
-// Démarrage de l'application
+// Initialisation
 initIA(updateStatus);
 
-// Gestion du clic sur la zone
-dropZone.addEventListener('click', () => fileInput.click());
-
-// Drag & Drop animations
-['dragenter', 'dragover'].forEach(eventName => {
-    dropZone.addEventListener(eventName, (e) => { e.preventDefault(); dropZone.classList.add('hover'); }, false);
-});
-['dragleave', 'drop'].forEach(eventName => {
-    dropZone.addEventListener(eventName, (e) => { e.preventDefault(); dropZone.classList.remove('hover'); }, false);
+// CORRECTION CLIC : Permet l'ouverture de la galerie mobile sans conflit
+dropZone.addEventListener('click', (e) => {
+    if (e.target !== fileInput) {
+        fileInput.click();
+    }
 });
 
-// Capture du fichier déposé ou sélectionné
+fileInput.addEventListener('click', (e) => {
+    e.stopPropagation(); // Empêche le bug de clic infini
+});
+
+// Drag & Drop
+['dragenter', 'dragover'].forEach(name => {
+    dropZone.addEventListener(name, (e) => { e.preventDefault(); dropZone.classList.add('hover'); });
+});
+['dragleave', 'drop'].forEach(name => {
+    dropZone.addEventListener(name, (e) => { e.preventDefault(); dropZone.classList.remove('hover'); });
+});
+
 dropZone.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files));
 fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
 
 function handleFiles(files) {
     if (files.length === 0) return;
-    const file = files[0]; // Correction ici : ajout de index 0 pour cibler le premier fichier
+    const file = files[0];
     
     const reader = new FileReader();
     reader.onload = function(event) {
@@ -43,10 +49,8 @@ function handleFiles(files) {
     reader.readAsDataURL(file);
 }
 
-// Lancement du calcul et affichage
 async function process(imageSrc) {
     resultsDiv.style.display = 'none';
-    
     const topResults = await analyserImage(imageSrc, (msg) => updateStatus(msg, true));
     
     if (!topResults) {
@@ -60,7 +64,6 @@ async function process(imageSrc) {
 
     topResults.forEach(jeu => {
         const pourcentage = Math.max(0, Math.min(100, (jeu.score * 100))).toFixed(1);
-        
         const row = document.createElement('div');
         row.className = 'game-row';
         row.innerHTML = `
