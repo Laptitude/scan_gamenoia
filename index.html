@@ -4,43 +4,56 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#16352a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <title>Ludothèque Scan</title>
-<script async src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
-<script async src="https://docs.opencv.org/4.5.0/opencv.js"></script>
 <style>
-:root{--felt:#16352a;--felt2:#1f4637;--paper:#f4efe3;--ink:#1b1a17;--mut:#6f6a5c;--ac:#e0a526;--ok:#37d67a;--bd:#d8d0bc}
+:root{--felt:#16352a;--felt2:#244d3d;--paper:#f4efe3;--ink:#1b1a17;--mut:#6f6a5c;--ac:#e0a526;--ok:#37d67a;--bd:#d8d0bc}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%}
-body{background:var(--felt);color:var(--paper);font:16px/1.5 Georgia,"Iowan Old Style",serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
-h1{font-size:1.25rem;margin:0;font-weight:700;letter-spacing:.01em}
-header{display:flex;justify-content:space-between;align-items:center;padding:14px 16px 6px}
-#status{font:.8rem system-ui,sans-serif;color:#b9cfc4}
-nav{display:flex;gap:6px;padding:8px 16px;font-family:system-ui,sans-serif}
-button,.btn{font:600 .9rem system-ui,sans-serif;border:0;border-radius:8px;padding:10px 14px;background:var(--felt2);color:var(--paper);cursor:pointer}
-button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--ac);outline-offset:2px}
-button.on{background:var(--ac);color:var(--ink)}
-button.pri{background:var(--ac);color:var(--ink)}
+html,body{margin:0;min-height:100%}
+body{background:var(--felt);color:var(--paper);font:16px/1.5 Georgia,"Iowan Old Style",serif;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+h1{font-size:1.25rem;margin:0}
+header{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 16px 6px}
+#status{font:.8rem system-ui,sans-serif;color:#b9cfc4;text-align:right}
+nav{display:flex;gap:6px;padding:8px 16px;font-family:system-ui,sans-serif;overflow-x:auto}
+button,.btn{font:600 .9rem system-ui,sans-serif;border:0;border-radius:8px;padding:11px 14px;background:var(--felt2);color:var(--paper);cursor:pointer;display:inline-block;text-align:center;-webkit-tap-highlight-color:transparent}
+button:focus-visible,.btn:focus-within,input:focus-visible,textarea:focus-visible{outline:3px solid var(--ac);outline-offset:2px}
+button.on,button.pri,.btn.pri{background:var(--ac);color:var(--ink)}
 button.danger{background:#7d2b22}
+button:disabled{opacity:.5}
 main{padding:0 16px 40px;max-width:760px;margin:0 auto}
 section{display:none}section.show{display:block}
-.seg{display:flex;gap:6px;margin:6px 0 10px}
-#stage{position:relative;background:#000;border-radius:10px;overflow:hidden;min-height:200px}
-#view{width:100%;display:block;cursor:pointer}
-.bar{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.seg,.bar{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+#stage{position:relative;background:#000;border-radius:10px;overflow:hidden;min-height:220px}
+#view{width:100%;display:block;touch-action:manipulation}
+#vid{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
 .hint{font:.85rem system-ui,sans-serif;color:#b9cfc4;margin:6px 0}
 .card{background:var(--paper);color:var(--ink);border-radius:10px;padding:14px;margin:10px 0}
-.row{display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--bd)}
+.row{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--bd);flex-wrap:wrap}
 .row:last-child{border:0}
 .row img{width:50px;height:50px;object-fit:cover;border-radius:6px;background:#ddd}
-.row .t{flex:1}.row small{color:var(--mut);font-family:system-ui,sans-serif}
-label{display:block;font:600 .85rem system-ui,sans-serif;margin:10px 0 4px}
-input[type=text],textarea{width:100%;padding:10px;border:1px solid var(--bd);border-radius:8px;font:1rem system-ui,sans-serif;background:#fff;color:var(--ink)}
+.row .t{flex:1;min-width:120px}.row small{color:var(--mut);font-family:system-ui,sans-serif}
+label.l{display:block;font:600 .85rem system-ui,sans-serif;margin:10px 0 4px}
+input[type=text],textarea{width:100%;padding:10px;border:1px solid var(--bd);border-radius:8px;font:16px system-ui,sans-serif;background:#fff;color:var(--ink)}
 input[type=file]{font:.9rem system-ui,sans-serif;width:100%}
-dialog{border:0;border-radius:12px;background:var(--paper);color:var(--ink);max-width:min(92vw,520px);padding:20px}
-dialog::backdrop{background:rgba(0,0,0,.6)}
-dialog h2{margin:0 0 4px}
-.meta{font:.85rem system-ui,sans-serif;color:var(--mut);margin-bottom:10px}
 .muted{color:var(--mut);font-family:system-ui,sans-serif}
+/* chargement */
+#boot{list-style:none;margin:0;padding:0;font:.9rem system-ui,sans-serif}
+#boot li{display:flex;align-items:center;gap:10px;padding:6px 0}
+#boot .nm{flex:1}#boot .tm{font-variant-numeric:tabular-nums;color:var(--mut)}
+.spin{width:16px;height:16px;border-radius:50%;border:3px solid rgba(0,0,0,.15);border-top-color:var(--ac);animation:sp .8s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+.ok{color:#1f8a4c;font-weight:700;width:16px;text-align:center;flex:none}.ko{color:#b3261e;font-weight:700;width:16px;text-align:center;flex:none}
+.wait{width:16px;text-align:center;color:var(--mut);flex:none}
+/* superpositions */
+.over{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:18px;text-align:center;background:rgba(10,25,19,.88);font:.95rem system-ui,sans-serif}
+#busy{position:absolute;left:10px;right:10px;bottom:10px;background:rgba(10,25,19,.92);border-radius:10px;padding:10px 12px;display:none;align-items:center;gap:10px;font:.9rem system-ui,sans-serif}
+#busy .spin{border-color:rgba(255,255,255,.25);border-top-color:var(--ac)}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;padding:16px;z-index:9}
+#modal.show{display:flex}
+#modal .card{max-width:520px;width:100%;max-height:85vh;overflow:auto}
+.meta{font:.85rem system-ui,sans-serif;color:var(--mut)}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:2s}}
 </style>
 </head>
 <body>
@@ -52,23 +65,40 @@ dialog h2{margin:0 0 4px}
 </nav>
 <main>
 <section id="scan" class="show">
+  <div class="card" id="bootCard">
+    <b>Préparation de l’application</b>
+    <ul id="boot"></ul>
+    <p class="hint" id="bootNote" style="color:var(--mut)">Premier lancement : environ 10 Mo à télécharger, la durée dépend de ta connexion.</p>
+    <button id="btnRetry" class="pri" hidden>Réessayer</button>
+  </div>
+
   <div class="seg">
     <button id="mLive" class="on">Temps réel</button>
     <button id="mPhoto">Scan photo</button>
   </div>
-  <div id="stage"><canvas id="view" width="640" height="480"></canvas></div>
-  <div class="bar" id="photoBar" hidden>
-    <button class="pri" id="btnShot">Capturer et analyser</button>
-    <button id="btnResume" hidden>Reprendre la caméra</button>
-    <label class="btn" style="margin:0">Importer une photo<input id="fileScan" type="file" accept="image/*" hidden></label>
+  <div id="stage">
+    <canvas id="view" width="640" height="480"></canvas>
+    <video id="vid" playsinline muted autoplay></video>
+    <div class="over" id="camBox">
+      <div id="camMsg">Autorise l’accès à la caméra pour scanner.</div>
+      <button class="pri" id="btnCam">Autoriser la caméra</button>
+      <div class="hint" id="camHelp"></div>
+    </div>
+    <div id="busy"><span class="spin"></span><span id="busyT"></span></div>
   </div>
-  <p class="hint" id="hint">Vise une boîte de jeu : un cadre vert apparaît sur les jeux reconnus. Touche un cadre pour ouvrir la fiche.</p>
+  <div class="bar">
+    <button class="pri" id="btnShot" hidden>Capturer et analyser</button>
+    <button id="btnResume" hidden>Reprendre la caméra</button>
+    <label class="btn">Galerie<input id="fileGal" type="file" accept="image/*" hidden></label>
+    <label class="btn">Appareil photo<input id="fileCam" type="file" accept="image/*" capture="environment" hidden></label>
+  </div>
+  <p class="hint" id="hint"></p>
 </section>
 
 <section id="cat">
   <div class="bar">
     <button id="btnExport">Exporter bibliotheque.db</button>
-    <label class="btn" style="margin:0">Importer un .db<input id="fileDb" type="file" hidden></label>
+    <label class="btn">Importer un .db<input id="fileDb" type="file" hidden></label>
     <button id="btnSync">Récupérer depuis le serveur</button>
   </div>
   <div class="card" id="list"></div>
@@ -76,10 +106,10 @@ dialog h2{margin:0 0 4px}
 
 <section id="add">
   <div class="card">
-    <label for="fNom">Nom du jeu</label><input id="fNom" type="text">
-    <label for="fEd">Éditeur et année</label><input id="fEd" type="text" placeholder="Ex. Days of Wonder, 2004">
-    <label for="fDesc">Description et règles</label><textarea id="fDesc" rows="5"></textarea>
-    <label for="fImg">Photo de la face avant de la boîte (bien cadrée, de face)</label>
+    <label class="l" for="fNom">Nom du jeu</label><input id="fNom" type="text" autocomplete="off">
+    <label class="l" for="fEd">Éditeur et année</label><input id="fEd" type="text" placeholder="Ex. Days of Wonder, 2004" autocomplete="off">
+    <label class="l" for="fDesc">Description et règles</label><textarea id="fDesc" rows="5"></textarea>
+    <label class="l" for="fImg">Photo de la face avant de la boîte (de face, bien cadrée)</label>
     <input id="fImg" type="file" accept="image/*">
     <div class="bar"><button class="pri" id="btnAdd">Enregistrer le jeu</button></div>
     <p class="hint" id="addMsg" style="color:#555"></p>
@@ -87,40 +117,89 @@ dialog h2{margin:0 0 4px}
 </section>
 </main>
 
-<dialog id="dlg"><h2 id="dN"></h2><div class="meta" id="dE"></div><p id="dD" style="white-space:pre-wrap"></p><div class="bar"><button id="dClose">Fermer</button></div></dialog>
-
-<video id="vid" playsinline muted hidden></video>
+<div id="modal"><div class="card"><h2 id="dN" style="margin:0 0 2px"></h2><div class="meta" id="dE"></div><p id="dD" style="white-space:pre-wrap"></p><button id="dClose">Fermer</button></div></div>
 
 <script>
-const SQLBASE='https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/';
 const $=s=>document.querySelector(s);
 const view=$('#view'),ctx=view.getContext('2d'),vid=$('#vid');
 const work=document.createElement('canvas'),still=document.createElement('canvas');
-let SQL,db,GAMES=[],mode='live',stream=null,frozen=false,results=[],busy=false,ready=false,tab='scan';
-
+let SQL,db,GAMES=[],mode='live',stream=null,frozen=false,results=[],busy=false,ready=false,tab='scan',sqlOk=false,cvOk=false;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const status=t=>$('#status').textContent=t;
-const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const until=f=>new Promise(r=>{const t=setInterval(()=>{if(f()){clearInterval(t);r()}},100)});
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const IOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 
-/* ---------- Stockage local (IndexedDB) ---------- */
+/* ---------- Indicateurs de chargement avec temps ---------- */
+const STEPS={};
+function stepInit(id,label){STEPS[id]={label,t0:null,t1:null,state:'wait',info:''};}
+function stepStart(id,info){const s=STEPS[id];s.t0=performance.now();s.t1=null;s.state='run';s.info=info||''}
+function stepEnd(id,ok,info){const s=STEPS[id];s.t1=performance.now();s.state=ok?'ok':'ko';if(info!==undefined)s.info=info}
+function stepInfo(id,info){STEPS[id].info=info}
+function renderSteps(){
+  const html=Object.values(STEPS).map(s=>{
+    const t=s.t0?((s.t1||performance.now())-s.t0)/1000:0;
+    const ic=s.state==='run'?'<span class="spin"></span>':s.state==='ok'?'<span class="ok">✓</span>':s.state==='ko'?'<span class="ko">✕</span>':'<span class="wait">•</span>';
+    return `<li>${ic}<span class="nm">${esc(s.label)}${s.info?' <small class="muted">('+esc(s.info)+')</small>':''}</span><span class="tm">${s.t0?t.toFixed(1)+' s':''}</span></li>`;
+  }).join('');
+  if($('#boot').dataset.h!==html){$('#boot').innerHTML=html;$('#boot').dataset.h=html}
+}
+setInterval(renderSteps,250);
+stepInit('sql','Moteur de base de données');
+stepInit('cv','Moteur de reconnaissance d’images');
+stepInit('db','Chargement du catalogue');
+
+/* indicateur d'opération longue (analyse, signature) */
+let busyT=null,busyT0=0,busyLabel='',busyProg='';
+function busyOn(label){busyLabel=label;busyProg='';busyT0=performance.now();$('#busy').style.display='flex';busyRender();clearInterval(busyT);busyT=setInterval(busyRender,200)}
+function busyRender(){$('#busyT').textContent=busyLabel+(busyProg?' · '+busyProg:'')+' · '+((performance.now()-busyT0)/1000).toFixed(1)+' s'}
+function busyOff(){clearInterval(busyT);$('#busy').style.display='none'}
+const busyProgress=p=>{busyProg=p;busyRender()};
+
+/* ---------- Chargement de scripts avec sources de secours ---------- */
+function loadScript(src,ms){
+  return new Promise((res,rej)=>{
+    const s=document.createElement('script'),to=setTimeout(()=>{s.remove();rej(new Error('délai dépassé'))},ms);
+    s.src=src;s.onload=()=>{clearTimeout(to);res()};s.onerror=()=>{clearTimeout(to);s.remove();rej(new Error('inaccessible'))};
+    document.head.appendChild(s);
+  });
+}
+async function waitFor(f,ms){const t0=performance.now();while(!f()){if(performance.now()-t0>ms)throw new Error('délai dépassé');await sleep(100)}}
+
+async function loadSql(){
+  stepStart('sql');
+  const src=[['./sql-wasm.js','./'],['https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js','https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/']];
+  for(const [u,base] of src){
+    try{
+      stepInfo('sql',u.startsWith('http')?'serveur externe':'ton serveur');
+      await loadScript(u,40000);
+      if(!window.initSqlJs)throw new Error('absent');
+      SQL=await initSqlJs({locateFile:f=>base+f});
+      sqlOk=true;stepEnd('sql',true,'');return;
+    }catch(e){console.warn('sql.js',u,e)}
+  }
+  stepEnd('sql',false,'échec');throw new Error('sql');
+}
+async function loadCv(){
+  stepStart('cv');
+  const src=['./opencv.js','https://docs.opencv.org/4.5.0/opencv.js','https://docs.opencv.org/4.5.5/opencv.js'];
+  for(const u of src){
+    try{
+      stepInfo('cv',u.startsWith('http')?'téléchargement ~8 Mo':'ton serveur');
+      await loadScript(u,90000);
+      if(!window.cv)throw new Error('absent');
+      stepInfo('cv','initialisation');
+      await waitFor(()=>window.cv&&cv.Mat&&cv.ORB&&cv.BFMatcher,60000);
+      cvOk=true;stepEnd('cv',true,'');return;
+    }catch(e){console.warn('opencv',u,e)}
+  }
+  stepEnd('cv',false,'échec');throw new Error('cv');
+}
+
+/* ---------- Stockage local ---------- */
 const idb=()=>new Promise((res,rej)=>{const r=indexedDB.open('ludotheque',1);r.onupgradeneeded=()=>r.result.createObjectStore('k');r.onsuccess=()=>res(r.result);r.onerror=()=>rej()});
 async function idbGet(){try{const d=await idb();return await new Promise(r=>{const q=d.transaction('k').objectStore('k').get('db');q.onsuccess=()=>r(q.result);q.onerror=()=>r()})}catch(e){}}
 async function idbSet(v){try{const d=await idb();d.transaction('k','readwrite').objectStore('k').put(v,'db')}catch(e){}}
 const persist=()=>idbSet(db.export());
-
-/* ---------- Démarrage ---------- */
-async function boot(){
-  status('Chargement de SQLite…');
-  await until(()=>window.initSqlJs);
-  SQL=await initSqlJs({locateFile:f=>SQLBASE+f});
-  let buf=await idbGet();
-  if(!buf){try{const r=await fetch('bibliotheque.db',{cache:'no-cache'});if(r.ok)buf=new Uint8Array(await r.arrayBuffer())}catch(e){}}
-  openDb(buf);
-  status('Chargement d’OpenCV…');
-  await until(()=>window.cv&&cv.Mat&&cv.ORB&&cv.BFMatcher);
-  ready=true;loadGames();status(GAMES.length+' jeu(x) en mémoire');
-  startCam();setInterval(tick,300);requestAnimationFrame(draw);
-}
 function openDb(buf){
   db=buf?new SQL.Database(buf):new SQL.Database();
   db.run(`CREATE TABLE IF NOT EXISTS jeux(id INTEGER PRIMARY KEY,nom TEXT,description TEXT,editeur_annee TEXT,signatures_orb BLOB,points BLOB,nb INTEGER,dimensions_boite TEXT,miniature_boite TEXT)`);
@@ -132,10 +211,73 @@ function loadGames(){
     const r=st.getAsObject(),[w,h]=r.dimensions_boite.split('x').map(Number);
     const des=new cv.Mat(r.nb,32,cv.CV_8U);des.data.set(r.signatures_orb);
     const p=r.points;
-    GAMES.push({...r,w,h,des,pts:new Float32Array(p.buffer.slice(p.byteOffset,p.byteOffset+p.byteLength))});
+    GAMES.push(Object.assign({},r,{w,h,des,pts:new Float32Array(p.buffer.slice(p.byteOffset,p.byteOffset+p.byteLength))}));
   }
-  st.free();renderList();
+  st.free();renderList();status(GAMES.length+' jeu(x) en mémoire');
 }
+
+/* ---------- Démarrage ---------- */
+async function boot(){
+  $('#btnRetry').hidden=true;status('Chargement…');
+  if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
+  try{
+    if(!sqlOk)await loadSql();
+    if(!cvOk)await loadCv();
+    stepStart('db');
+    let buf=await idbGet();
+    if(!buf){try{const r=await fetch('bibliotheque.db',{cache:'no-cache'});if(r.ok)buf=new Uint8Array(await r.arrayBuffer())}catch(e){}}
+    openDb(buf);loadGames();stepEnd('db',true,GAMES.length+' jeu(x)');
+    ready=true;$('#bootNote').textContent='Tout est prêt.';
+    setTimeout(()=>$('#bootCard').style.display='none',1500);
+  }catch(e){
+    $('#bootNote').textContent='Un chargement a échoué. Vérifie ta connexion internet puis réessaie. Pour fonctionner sans internet, place opencv.js et sql-wasm.js (+ sql-wasm.wasm) à côté de index.html.';
+    $('#btnRetry').hidden=false;status('Erreur de chargement');
+  }
+}
+$('#btnRetry').onclick=boot;
+
+/* ---------- Caméra et autorisations ---------- */
+function camShow(msg,help,btn){
+  $('#camBox').style.display='flex';$('#camMsg').textContent=msg;$('#camHelp').textContent=help||'';
+  $('#btnCam').style.display=btn===false?'none':'';
+}
+function camHelpText(){
+  return IOS?'Sur iPhone/iPad : Réglages > Safari > Caméra > Autoriser (ou Demander), puis recharge la page. Tu peux aussi utiliser les boutons Galerie et Appareil photo.'
+   :'Sur Android : touche le cadenas à gauche de l’adresse > Autorisations > Caméra > Autoriser, puis recharge la page. Tu peux aussi utiliser les boutons Galerie et Appareil photo.';
+}
+async function startCam(){
+  if(stream)return true;
+  if(!window.isSecureContext)return camShow('La caméra est bloquée : la page n’est pas en HTTPS.','Ouvre le site avec une adresse https:// (ou localhost). En attendant, utilise Galerie ou Appareil photo.',false),false;
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return camShow('Ce navigateur ne permet pas la caméra en direct.','Utilise les boutons Galerie ou Appareil photo.',false),false;
+  camShow('Demande d’autorisation… accepte la fenêtre qui s’affiche.','',false);
+  try{
+    try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false})}
+    catch(e){if(e.name==='OverconstrainedError'||e.name==='NotFoundError')stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});else throw e}
+    vid.srcObject=stream;vid.muted=true;
+    await vid.play();
+    await waitFor(()=>vid.videoWidth>0,8000);
+    $('#camBox').style.display='none';
+    stream.getVideoTracks()[0].addEventListener('ended',()=>{stream=null});
+    return true;
+  }catch(e){
+    stopCam();
+    const n=e.name;
+    if(n==='NotAllowedError'||n==='SecurityError')camShow('Accès à la caméra refusé.',camHelpText());
+    else if(n==='NotFoundError')camShow('Aucune caméra détectée sur cet appareil.','Utilise Galerie ou Appareil photo.');
+    else if(n==='NotReadableError')camShow('La caméra est utilisée par une autre application.','Ferme-la puis réessaie.');
+    else camShow('Impossible de démarrer la caméra ('+n+').','Réessaie, ou utilise Galerie / Appareil photo.');
+    return false;
+  }
+}
+function stopCam(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}vid.srcObject=null}
+$('#btnCam').onclick=startCam;
+if(navigator.permissions&&navigator.permissions.query){
+  navigator.permissions.query({name:'camera'}).then(p=>{p.onchange=()=>{if(p.state==='granted'&&tab==='scan')startCam()}}).catch(()=>{});
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden)stopCam();
+  else if(tab==='scan'&&!frozen)startCam();
+});
 
 /* ---------- Vision ---------- */
 function features(canvas,n){
@@ -155,11 +297,13 @@ function convexOk(q){
     s+=c>0?1:-1;A+=q[2*i]*q[2*j+1]-q[2*j]*q[2*i+1];}
   return Math.abs(s)===4&&Math.abs(A/2)>400;
 }
-function analyse(canvas,nf,minIn){
+async function analyse(canvas,nf,minIn,prog){
   const f=features(canvas,nf),out=[];
   if(f.des.rows>=10&&GAMES.length){
     const bf=new cv.BFMatcher(cv.NORM_HAMMING,false);
-    for(const g of GAMES){
+    for(let gi=0;gi<GAMES.length;gi++){
+      const g=GAMES[gi];
+      if(prog){prog('jeu '+(gi+1)+'/'+GAMES.length);await sleep(0)}
       const m=new cv.DMatchVectorVector();
       bf.knnMatch(g.des,f.des,m,2);
       const s=[],d=[];
@@ -175,15 +319,12 @@ function analyse(canvas,nf,minIn){
       if(s.length/2<minIn)continue;
       const n=s.length/2,S=cv.matFromArray(n,1,cv.CV_32FC2,s),D=cv.matFromArray(n,1,cv.CV_32FC2,d),mk=new cv.Mat();
       const H=cv.findHomography(S,D,cv.RANSAC,4,mk);
-      if(!H.empty()){
-        const inl=cv.countNonZero(mk);
-        if(inl>=minIn){
-          const C=cv.matFromArray(4,1,cv.CV_32FC2,[0,0,g.w,0,g.w,g.h,0,g.h]),T=new cv.Mat();
-          cv.perspectiveTransform(C,T,H);
-          const q=Array.from(T.data32F);
-          if(convexOk(q))out.push({g,q,inl});
-          C.delete();T.delete();
-        }
+      if(!H.empty()&&cv.countNonZero(mk)>=minIn){
+        const C=cv.matFromArray(4,1,cv.CV_32FC2,[0,0,g.w,0,g.w,g.h,0,g.h]),T=new cv.Mat();
+        cv.perspectiveTransform(C,T,H);
+        const q=Array.from(T.data32F);
+        if(convexOk(q))out.push({g,q});
+        C.delete();T.delete();
       }
       S.delete();D.delete();mk.delete();H.delete();
     }
@@ -193,23 +334,12 @@ function analyse(canvas,nf,minIn){
   return out;
 }
 
-/* ---------- Caméra et affichage ---------- */
-async function startCam(){
-  if(stream)return;
-  try{
-    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}},audio:false});
-    vid.srcObject=stream;await vid.play();
-  }catch(e){
-    stream=null;
-    $('#hint').textContent='Caméra indisponible ('+e.name+'). Le site doit être en HTTPS et la permission accordée. Tu peux importer une photo en mode Scan photo.';
-  }
-}
-function stopCam(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}}
+/* ---------- Affichage ---------- */
 function draw(){
   requestAnimationFrame(draw);
   if(tab!=='scan')return;
   if(frozen){
-    if(view.width!==still.width){view.width=still.width;view.height=still.height}
+    if(view.width!==still.width||view.height!==still.height){view.width=still.width;view.height=still.height}
     ctx.drawImage(still,0,0);
   }else if(stream&&vid.videoWidth){
     const w=640,h=Math.round(640*vid.videoHeight/vid.videoWidth);
@@ -217,113 +347,132 @@ function draw(){
     ctx.drawImage(vid,0,0,w,h);
   }else return;
   const k=view.width/640;
-  ctx.lineWidth=3*k;ctx.font=`bold ${15*k}px system-ui,sans-serif`;
+  ctx.lineWidth=3*k;ctx.font='bold '+(15*k)+'px system-ui,sans-serif';
   for(const r of results){
     const q=r.q;
-    ctx.strokeStyle='#37d67a';ctx.fillStyle='rgba(55,214,122,.18)';
+    ctx.strokeStyle='#37d67a';ctx.fillStyle='rgba(55,214,122,.2)';
     ctx.beginPath();ctx.moveTo(q[0],q[1]);for(let i=1;i<4;i++)ctx.lineTo(q[2*i],q[2*i+1]);ctx.closePath();ctx.fill();ctx.stroke();
     const t=r.g.nom,tw=ctx.measureText(t).width+12*k;
     ctx.fillStyle='#16352a';ctx.fillRect(q[0],q[1]-24*k,tw,24*k);
     ctx.fillStyle='#fff';ctx.fillText(t,q[0]+6*k,q[1]-7*k);
   }
 }
-function tick(){
+async function tick(){
   if(!ready||busy||frozen||tab!=='scan'||mode!=='live'||!stream||!vid.videoWidth||!GAMES.length)return;
   busy=true;
   try{
     work.width=640;work.height=Math.round(640*vid.videoHeight/vid.videoWidth);
     work.getContext('2d').drawImage(vid,0,0,work.width,work.height);
-    results=analyse(work,500,10);
+    results=await analyse(work,500,10);
   }catch(e){console.error(e)}
   busy=false;
 }
 function fit(img,max){
-  const s=Math.min(1,max/Math.max(img.width||img.videoWidth,img.height||img.videoHeight));
-  const c=document.createElement('canvas');
-  c.width=Math.round((img.width||img.videoWidth)*s);c.height=Math.round((img.height||img.videoHeight)*s);
+  const W=img.naturalWidth||img.videoWidth||img.width,H=img.naturalHeight||img.videoHeight||img.height;
+  const s=Math.min(1,max/Math.max(W,H)),c=document.createElement('canvas');
+  c.width=Math.round(W*s);c.height=Math.round(H*s);
   c.getContext('2d').drawImage(img,0,0,c.width,c.height);return c;
 }
-function loadImg(file){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=URL.createObjectURL(file)})}
+function loadImg(file){return new Promise((res,rej)=>{const u=URL.createObjectURL(file),i=new Image();i.onload=()=>{res(i)};i.onerror=()=>rej(new Error('image illisible'));i.src=u})}
+
 async function scanStill(c){
   still.width=c.width;still.height=c.height;still.getContext('2d').drawImage(c,0,0);
   frozen=true;results=[];$('#btnResume').hidden=false;
-  $('#hint').textContent='Analyse en cours…';
-  await new Promise(r=>setTimeout(r,60));
-  try{results=analyse(still,4000,12)}catch(e){console.error(e)}
-  $('#hint').textContent=results.length?results.length+' jeu(x) reconnu(s). Touche un cadre pour la fiche.':'Aucun jeu reconnu. Rapproche-toi, évite les reflets et cadre les boîtes de face.';
+  $('#camBox').style.display='none';
+  if(!ready){busyOn('Attente du chargement des moteurs');await waitFor(()=>ready,180000).catch(()=>{});busyOff();if(!ready){$('#hint').textContent='Les moteurs ne sont pas chargés. Réessaie le chargement.';return}}
+  if(!GAMES.length){$('#hint').textContent='Le catalogue est vide : ajoute d’abord des jeux.';return}
+  busy=true;busyOn('Analyse haute précision');await sleep(60);
+  const t0=performance.now();
+  try{results=await analyse(still,4000,12,busyProgress)}catch(e){console.error(e);$('#hint').textContent='Erreur pendant l’analyse.'}
+  busy=false;busyOff();
+  const sec=((performance.now()-t0)/1000).toFixed(1);
+  $('#hint').textContent=(results.length?results.length+' jeu(x) reconnu(s)':'Aucun jeu reconnu')+' en '+sec+' s. '+(results.length?'Touche un cadre pour la fiche.':'Rapproche-toi, évite les reflets, cadre les boîtes de face.');
+}
+function hintMode(){
+  $('#hint').textContent=mode==='live'?'Vise une boîte : un cadre vert apparaît sur les jeux reconnus. Touche un cadre pour la fiche.':'Cadre ta bibliothèque puis touche « Capturer et analyser », ou choisis une photo.';
 }
 function setMode(m){
   mode=m;frozen=false;results=[];
   $('#mLive').classList.toggle('on',m==='live');$('#mPhoto').classList.toggle('on',m==='photo');
-  $('#photoBar').hidden=m!=='photo';$('#btnResume').hidden=true;
-  $('#hint').textContent=m==='live'?'Vise une boîte de jeu : un cadre vert apparaît sur les jeux reconnus. Touche un cadre pour ouvrir la fiche.':'Cadre ta bibliothèque, puis capture : analyse haute précision en une fois.';
+  $('#btnShot').hidden=m!=='photo';$('#btnResume').hidden=true;hintMode();
+  if(!stream)startCam();
 }
 $('#mLive').onclick=()=>setMode('live');
 $('#mPhoto').onclick=()=>setMode('photo');
-$('#btnResume').onclick=()=>{frozen=false;results=[];$('#btnResume').hidden=true};
+$('#btnResume').onclick=()=>{frozen=false;results=[];$('#btnResume').hidden=true;if(!stream)startCam();hintMode()};
 $('#btnShot').onclick=()=>{
-  if(!ready||!stream||!vid.videoWidth)return alert('La caméra ou OpenCV n’est pas prêt.');
+  if(!stream||!vid.videoWidth)return startCam();
   scanStill(fit(vid,1920));
 };
-$('#fileScan').onchange=async e=>{
-  const f=e.target.files[0];if(!f||!ready)return;
-  scanStill(fit(await loadImg(f),1920));e.target.value='';
-};
+async function fromFile(e){
+  const f=e.target.files[0];e.target.value='';if(!f)return;
+  try{busyOn('Lecture de la photo');await sleep(30);const img=await loadImg(f);const c=fit(img,1920);busyOff();scanStill(c)}
+  catch(err){busyOff();$('#hint').textContent='Photo illisible : '+err.message}
+}
+$('#fileGal').onchange=fromFile;$('#fileCam').onchange=fromFile;
 
-/* clic sur un cadre */
 function inPoly(q,x,y){let c=false;for(let i=0,j=3;i<4;j=i++){if((q[2*i+1]>y)!==(q[2*j+1]>y)&&x<(q[2*j]-q[2*i])*(y-q[2*i+1])/(q[2*j+1]-q[2*i+1])+q[2*i])c=!c}return c}
 view.onclick=e=>{
   const r=view.getBoundingClientRect(),x=(e.clientX-r.left)*view.width/r.width,y=(e.clientY-r.top)*view.height/r.height;
-  const hit=[...results].reverse().find(o=>inPoly(o.q,x,y));
+  const hit=results.slice().reverse().find(o=>inPoly(o.q,x,y));
   if(hit)openGame(hit.g);
 };
 function openGame(g){
   $('#dN').textContent=g.nom;$('#dE').textContent=g.editeur_annee||'';$('#dD').textContent=g.description||'Pas de description.';
-  $('#dlg').showModal();
+  $('#modal').classList.add('show');
 }
-$('#dClose').onclick=()=>$('#dlg').close();
+$('#dClose').onclick=()=>$('#modal').classList.remove('show');
+$('#modal').onclick=e=>{if(e.target.id==='modal')$('#modal').classList.remove('show')};
 
 /* ---------- Catalogue ---------- */
 function renderList(){
-  $('#list').innerHTML=GAMES.length?GAMES.map(g=>`<div class="row"><img alt="" src="${esc(g.miniature_boite)}"><div class="t"><b>${esc(g.nom)}</b><br><small>${esc(g.editeur_annee)}</small></div><button data-open="${g.id}">Fiche</button><button class="danger" data-del="${g.id}">Supprimer</button></div>`).join(''):'<p class="muted">Le catalogue est vide. Ajoute ton premier jeu avec une photo de sa boîte, ou importe un fichier bibliotheque.db.</p>';
+  $('#list').innerHTML=GAMES.length?GAMES.map(g=>`<div class="row"><img alt="" src="${esc(g.miniature_boite)}"><div class="t"><b>${esc(g.nom)}</b><br><small>${esc(g.editeur_annee)}</small></div><button data-open="${g.id}">Fiche</button><button class="danger" data-del="${g.id}">Supprimer</button></div>`).join(''):'<p class="muted">Le catalogue est vide. Ajoute un jeu avec une photo de sa boîte, ou importe un fichier bibliotheque.db.</p>';
 }
-$('#list').onclick=e=>{
+$('#list').onclick=async e=>{
   const o=e.target.dataset.open,d=e.target.dataset.del;
   if(o)openGame(GAMES.find(g=>g.id==o));
-  if(d&&confirm('Supprimer ce jeu ?')){db.run('DELETE FROM jeux WHERE id=?',[+d]);persist();loadGames();status(GAMES.length+' jeu(x) en mémoire')}
+  if(d&&confirm('Supprimer ce jeu ?')){db.run('DELETE FROM jeux WHERE id=?',[+d]);await persist();loadGames()}
 };
 $('#btnExport').onclick=()=>{
+  if(!db)return;
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([db.export()],{type:'application/octet-stream'}));
-  a.download='bibliotheque.db';a.click();
+  a.download='bibliotheque.db';document.body.appendChild(a);a.click();a.remove();
 };
 $('#fileDb').onchange=async e=>{
-  const f=e.target.files[0];if(!f)return;
-  openDb(new Uint8Array(await f.arrayBuffer()));await persist();loadGames();e.target.value='';status(GAMES.length+' jeu(x) importé(s)');
+  const f=e.target.files[0];e.target.value='';if(!f||!ready)return;
+  busyOn('Import du catalogue');await sleep(30);
+  openDb(new Uint8Array(await f.arrayBuffer()));await persist();loadGames();busyOff();
 };
 $('#btnSync').onclick=async()=>{
+  if(!ready)return;
+  busyOn('Téléchargement du catalogue');
   try{
     const r=await fetch('bibliotheque.db',{cache:'no-cache'});if(!r.ok)throw 0;
-    openDb(new Uint8Array(await r.arrayBuffer()));await persist();loadGames();status(GAMES.length+' jeu(x) à jour');
+    openDb(new Uint8Array(await r.arrayBuffer()));await persist();loadGames();
   }catch(e){alert('Aucun fichier bibliotheque.db trouvé sur le serveur.')}
+  busyOff();
 };
 
 /* ---------- Ajout d'un jeu ---------- */
 $('#btnAdd').onclick=async()=>{
   const nom=$('#fNom').value.trim(),file=$('#fImg').files[0],msg=$('#addMsg');
-  if(!ready)return msg.textContent='OpenCV charge encore, patiente quelques secondes.';
+  if(!ready)return msg.textContent='Les moteurs chargent encore (voir l’onglet Scanner). Patiente un peu.';
   if(!nom||!file)return msg.textContent='Indique un nom et choisis une photo de la boîte.';
-  msg.textContent='Calcul de la signature…';
-  await new Promise(r=>setTimeout(r,30));
-  const c=fit(await loadImg(file),600),f=features(c,1000);
-  if(f.des.rows<40){f.des.delete();return msg.textContent='Trop peu de détails détectés. Utilise une photo plus nette et mieux éclairée.'}
-  const th=document.createElement('canvas');th.width=th.height=50;
-  const t=th.getContext('2d'),s=Math.min(c.width,c.height);
-  t.drawImage(c,(c.width-s)/2,(c.height-s)/2,s,s,0,0,50,50);
-  db.run('INSERT INTO jeux(nom,description,editeur_annee,signatures_orb,points,nb,dimensions_boite,miniature_boite) VALUES(?,?,?,?,?,?,?,?)',
-    [nom,$('#fDesc').value,$('#fEd').value,new Uint8Array(f.des.data),new Uint8Array(f.pts.buffer),f.des.rows,c.width+'x'+c.height,th.toDataURL('image/jpeg',.6)]);
-  f.des.delete();await persist();loadGames();
-  msg.textContent='« '+nom+' » enregistré ('+GAMES.at(-1).nb+' points).';
-  ['#fNom','#fEd','#fDesc','#fImg'].forEach(i=>$(i).value='');status(GAMES.length+' jeu(x) en mémoire');
+  const t0=performance.now();msg.textContent='Calcul de la signature en cours… (quelques secondes)';
+  $('#btnAdd').disabled=true;await sleep(60);
+  try{
+    const c=fit(await loadImg(file),600),f=features(c,1000);
+    if(f.des.rows<40){f.des.delete();msg.textContent='Trop peu de détails détectés. Utilise une photo plus nette et mieux éclairée.';$('#btnAdd').disabled=false;return}
+    const th=document.createElement('canvas');th.width=th.height=50;
+    const s=Math.min(c.width,c.height);
+    th.getContext('2d').drawImage(c,(c.width-s)/2,(c.height-s)/2,s,s,0,0,50,50);
+    db.run('INSERT INTO jeux(nom,description,editeur_annee,signatures_orb,points,nb,dimensions_boite,miniature_boite) VALUES(?,?,?,?,?,?,?,?)',
+      [nom,$('#fDesc').value,$('#fEd').value,new Uint8Array(f.des.data),new Uint8Array(f.pts.buffer),f.des.rows,c.width+'x'+c.height,th.toDataURL('image/jpeg',.6)]);
+    const nb=f.des.rows;f.des.delete();await persist();loadGames();
+    msg.textContent='« '+nom+' » enregistré ('+nb+' points) en '+((performance.now()-t0)/1000).toFixed(1)+' s.';
+    ['#fNom','#fEd','#fDesc','#fImg'].forEach(i=>$(i).value='');
+  }catch(e){msg.textContent='Erreur : '+e.message}
+  $('#btnAdd').disabled=false;
 };
 
 /* ---------- Onglets ---------- */
@@ -331,8 +480,11 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   tab=b.dataset.tab;
   document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));
   document.querySelectorAll('section').forEach(s=>s.classList.toggle('show',s.id===tab));
-  if(tab==='scan'&&ready)startCam();else stopCam();
+  if(tab==='scan'&&!frozen)startCam();else if(tab!=='scan')stopCam();
 });
+
+hintMode();requestAnimationFrame(draw);setInterval(tick,300);
+startCam();   /* la caméra démarre sans attendre OpenCV */
 boot();
 </script>
 </body>
