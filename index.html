@@ -92,9 +92,12 @@ input[type=file]{font:.9rem system-ui,sans-serif;width:100%}
     <button id="btnResume" hidden>Reprendre la caméra</button>
     <label class="btn">Galerie<input id="fileGal" type="file" accept="image/*" hidden></label>
     <label class="btn">Appareil photo<input id="fileCam" type="file" accept="image/*" capture="environment" hidden></label>
-    <button id="btnWebGo">Chercher en ligne</button>
+    <button class="pri" id="btnId">Identifier via internet</button>
+    <button id="btnWebGo">Chercher par nom</button>
   </div>
   <p class="hint" id="hint"></p>
+  <p class="hint" id="idMsg"></p>
+  <div class="card" id="idCard" hidden><b>Jeux possibles trouvés sur internet</b><div id="idRes"></div></div>
 </section>
 
 <section id="cat">
@@ -391,13 +394,14 @@ async function scanStill(c){
   frozen=true;results=[];$('#btnResume').hidden=false;
   $('#camBox').style.display='none';
   if(!ready){busyOn('Attente du chargement des moteurs');await waitFor(()=>ready,180000).catch(()=>{});busyOff();if(!ready){$('#hint').textContent='Les moteurs ne sont pas chargés. Réessaie le chargement.';return}}
-  if(!GAMES.length){$('#hint').textContent='Le catalogue est vide : ajoute d’abord des jeux.';return}
+  if(!GAMES.length){$('#hint').textContent='Le catalogue est vide : je tente d’identifier les jeux sur internet.';if(navigator.onLine)identify();return}
   busy=true;busyOn('Analyse haute précision');await sleep(60);
   const t0=performance.now();
   try{results=await analyse(still,4000,12,busyProgress)}catch(e){console.error(e);$('#hint').textContent='Erreur pendant l’analyse.'}
   busy=false;busyOff();
   const sec=((performance.now()-t0)/1000).toFixed(1);
-  $('#hint').textContent=(results.length?results.length+' jeu(x) reconnu(s)':'Aucun jeu reconnu')+' en '+sec+' s. '+(results.length?'Touche un cadre pour la fiche.':'Rapproche-toi, évite les reflets, cadre les boîtes de face. Tu peux aussi chercher le jeu en ligne.');
+  $('#hint').textContent=(results.length?results.length+' jeu(x) reconnu(s)':'Aucun jeu reconnu')+' en '+sec+' s. '+(results.length?'Touche un cadre pour la fiche.':(navigator.onLine?'Je tente de lire les titres et de les chercher sur internet.':'Rapproche-toi, évite les reflets, cadre les boîtes de face.'));
+  if(!results.length)identify();
 }
 function hintMode(){
   $('#hint').textContent=mode==='live'?'Vise une boîte : un cadre vert apparaît sur les jeux reconnus. Touche un cadre pour la fiche.':'Cadre ta bibliothèque puis touche « Capturer et analyser », ou choisis une photo.';
@@ -517,8 +521,8 @@ async function webSearch(){
   $('#btnWeb').disabled=false;
 }
 function loadUrl(u){return new Promise((res,rej)=>{const i=new Image();i.crossOrigin='anonymous';i.onload=()=>res(i);i.onerror=()=>rej(new Error('image inaccessible'));i.src=u})}
-async function addFromWeb(i){
-  const w=WEB[i],msg=$('#wMsg');
+async function addFromWeb(w,msgEl){
+  const msg=msgEl||$('#wMsg');
   if(!ready)return msg.textContent='Les moteurs chargent encore (voir l’onglet Scanner).';
   const stop=timed(msg,'Téléchargement et calcul de la signature');
   await sleep(60);
@@ -536,8 +540,68 @@ async function addFromWeb(i){
 }
 $('#btnWeb').onclick=webSearch;
 $('#wQ').addEventListener('keydown',e=>{if(e.key==='Enter')webSearch()});
-$('#wRes').onclick=e=>{if(e.target.dataset.w!==undefined)addFromWeb(+e.target.dataset.w)};
+$('#wRes').onclick=e=>{if(e.target.dataset.w!==undefined)addFromWeb(WEB[+e.target.dataset.w])};
 $('#btnWebGo').onclick=()=>document.querySelector('[data-tab="web"]').click();
+
+/* ---------- Identification depuis la photo : lecture des titres (OCR) + recherche internet ---------- */
+let OCRW=null,IDW=[],identifying=false;
+function rot(c,deg){const r=document.createElement('canvas');r.width=c.height;r.height=c.width;const x=r.getContext('2d');x.translate(r.width/2,r.height/2);x.rotate(deg*Math.PI/180);x.drawImage(c,-c.width/2,-c.height/2);return r}
+function rowHtml(w,i){return '<div class="row">'+(w.img?'<img alt="" src="'+esc(w.img)+'">':'<img alt="">')+'<div class="t"><b>'+esc(w.titre)+'</b><br><small>'+esc(w.texte.slice(0,140))+'…</small><br><small><a href="'+esc(w.url)+'" target="_blank" rel="noopener">Voir la page</a></small></div><button class="pri" data-w="'+i+'"'+(w.img?'':' disabled')+'>'+(w.img?'Ajouter':'Pas d’image')+'</button></div>'}
+async function identify(){
+  if(identifying)return;
+  const msg=$('#idMsg'),card=$('#idCard'),box=$('#idRes');
+  if(!navigator.onLine)return msg.textContent='Pas de connexion internet.';
+  if(!ready&&!frozen&&(!stream||!vid.videoWidth))return msg.textContent='Prends d’abord une photo ou choisis-en une dans la galerie.';
+  if(!frozen){
+    if(!stream||!vid.videoWidth)return msg.textContent='Prends d’abord une photo ou choisis-en une dans la galerie.';
+    const c=fit(vid,1920);still.width=c.width;still.height=c.height;still.getContext('2d').drawImage(c,0,0);
+    frozen=true;results=[];$('#btnResume').hidden=false;
+  }
+  identifying=true;card.hidden=true;box.innerHTML='';IDW=[];msg.textContent='';
+  const t0=performance.now();
+  try{
+    busyOn('Chargement du module de lecture');
+    if(!window.Tesseract){await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',60000);if(!window.Tesseract)throw new Error('module de lecture indisponible')}
+    if(!OCRW){
+      busyLabel='Téléchargement des langues (première fois seulement)';
+      OCRW=await Tesseract.createWorker('fra+eng',1,{logger:m=>{if(m.status==='recognizing text')busyProg=Math.round(m.progress*100)+' %'}});
+    }
+    const base=fit(still,1600),passes=[base,rot(base,90),rot(base,-90)],found={};
+    for(let i=0;i<passes.length;i++){
+      busyLabel='Lecture des titres '+(i+1)+'/3';busyProg='';
+      const {data}=await OCRW.recognize(passes[i]);
+      const lines=data.lines&&data.lines.length?data.lines:(data.text||'').split('\n').map(t=>({text:t,confidence:60}));
+      for(const l of lines){
+        const t=(l.text||'').replace(/[^\p{L}\p{N}' &!-]/gu,' ').replace(/\s+/g,' ').trim();
+        const letters=(t.match(/\p{L}/gu)||[]).length;
+        if(l.confidence<60||letters<4||t.length>40)continue;
+        const k=t.toLowerCase(),sc=l.confidence*Math.min(t.length,20);
+        if(!found[k]||found[k].sc<sc)found[k]={t:t,sc:sc};
+      }
+    }
+    const cands=Object.values(found).sort((a,b)=>b.sc-a.sc).slice(0,10).map(x=>x.t);
+    let html='';
+    for(let i=0;i<cands.length;i++){
+      busyLabel='Recherche internet '+(i+1)+'/'+cands.length;busyProg='« '+cands[i]+' »';
+      const r=await Promise.allSettled([wikiSearch(cands[i],'fr','jeu de société'),wikiSearch(cands[i],'en','board game')]);
+      const words=cands[i].toLowerCase().split(' ').filter(w=>w.length>=4),seen={};
+      const hits=[].concat(...r.filter(x=>x.status==='fulfilled').map(x=>x.value)).filter(w=>{
+        const k=w.titre.toLowerCase();if(seen[k])return false;seen[k]=1;
+        return /jeu|game|juego/i.test(w.titre+' '+w.texte)&&words.some(x=>k.indexOf(x)>=0);
+      }).slice(0,2);
+      if(!hits.length)continue;
+      html+='<p class="meta">Texte lu : « '+esc(cands[i])+' »</p>';
+      for(const w of hits){IDW.push(w);html+=rowHtml(w,IDW.length-1)}
+    }
+    const sec=((performance.now()-t0)/1000).toFixed(1);
+    if(IDW.length){box.innerHTML=html;card.hidden=false;card.scrollIntoView({behavior:'smooth',block:'nearest'});
+      msg.textContent=IDW.length+' jeu(x) possible(s) en '+sec+' s. Vérifie chaque suggestion avant de l’ajouter.'}
+    else msg.textContent=(cands.length?'Aucun jeu trouvé':'Aucun titre lisible')+' en '+sec+' s. Rapproche-toi, cadre la face des boîtes, ou utilise « Chercher par nom ».';
+  }catch(e){console.error(e);msg.textContent='Échec de l’identification : '+e.message}
+  identifying=false;busyOff();
+}
+$('#btnId').onclick=identify;
+$('#idRes').onclick=e=>{if(e.target.dataset.w!==undefined)addFromWeb(IDW[+e.target.dataset.w],$('#idMsg'))};
 
 hintMode();requestAnimationFrame(draw);setInterval(tick,300);
 startCam();   /* la caméra démarre sans attendre OpenCV */
