@@ -1,13 +1,12 @@
-// 1. Une seule et unique importation propre tout en haut
-import { pipeline, env } from 'https://unpkg.com';
+// 1. Utilisation du CDN esm.sh, totalement compatible CORS et optimisé pour le navigateur
+import { pipeline, env } from 'https://esm.sh';
 
-// Configuration pour forcer l'utilisation des modèles distants
+// Configuration stricte pour les modèles distants
 env.allowLocalModels = false;
 env.remoteObjectURL = 'https://huggingface.co';
 
 let visionPipeline = null;
 let databaseIndex = [];
-
 // 2. Initialiser le modèle d'IA au démarrage
 export async function initIA(onStatusUpdate) {
     try {
