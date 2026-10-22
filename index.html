@@ -62,6 +62,7 @@ input[type=file]{font:.9rem system-ui,sans-serif;width:100%}
   <button data-tab="scan" class="on">Scanner</button>
   <button data-tab="cat">Catalogue</button>
   <button data-tab="add">Ajouter un jeu</button>
+  <button data-tab="web">Recherche web</button>
 </nav>
 <main>
 <section id="scan" class="show">
@@ -91,6 +92,7 @@ input[type=file]{font:.9rem system-ui,sans-serif;width:100%}
     <button id="btnResume" hidden>Reprendre la caméra</button>
     <label class="btn">Galerie<input id="fileGal" type="file" accept="image/*" hidden></label>
     <label class="btn">Appareil photo<input id="fileCam" type="file" accept="image/*" capture="environment" hidden></label>
+    <button id="btnWebGo">Chercher en ligne</button>
   </div>
   <p class="hint" id="hint"></p>
 </section>
@@ -113,6 +115,15 @@ input[type=file]{font:.9rem system-ui,sans-serif;width:100%}
     <input id="fImg" type="file" accept="image/*">
     <div class="bar"><button class="pri" id="btnAdd">Enregistrer le jeu</button></div>
     <p class="hint" id="addMsg" style="color:#555"></p>
+  </div>
+</section>
+<section id="web">
+  <div class="card">
+    <label class="l" for="wQ">Nom du jeu à chercher sur internet</label>
+    <input id="wQ" type="text" placeholder="Ex. Catan, Dixit, Carcassonne" autocomplete="off" enterkeyhint="search">
+    <div class="bar"><button class="pri" id="btnWeb">Rechercher</button></div>
+    <p class="hint" id="wMsg" style="color:#555"></p>
+    <div id="wRes"></div>
   </div>
 </section>
 </main>
@@ -386,7 +397,7 @@ async function scanStill(c){
   try{results=await analyse(still,4000,12,busyProgress)}catch(e){console.error(e);$('#hint').textContent='Erreur pendant l’analyse.'}
   busy=false;busyOff();
   const sec=((performance.now()-t0)/1000).toFixed(1);
-  $('#hint').textContent=(results.length?results.length+' jeu(x) reconnu(s)':'Aucun jeu reconnu')+' en '+sec+' s. '+(results.length?'Touche un cadre pour la fiche.':'Rapproche-toi, évite les reflets, cadre les boîtes de face.');
+  $('#hint').textContent=(results.length?results.length+' jeu(x) reconnu(s)':'Aucun jeu reconnu')+' en '+sec+' s. '+(results.length?'Touche un cadre pour la fiche.':'Rapproche-toi, évite les reflets, cadre les boîtes de face. Tu peux aussi chercher le jeu en ligne.');
 }
 function hintMode(){
   $('#hint').textContent=mode==='live'?'Vise une boîte : un cadre vert apparaît sur les jeux reconnus. Touche un cadre pour la fiche.':'Cadre ta bibliothèque puis touche « Capturer et analyser », ou choisis une photo.';
@@ -482,6 +493,51 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('section').forEach(s=>s.classList.toggle('show',s.id===tab));
   if(tab==='scan'&&!frozen)startCam();else if(tab!=='scan')stopCam();
 });
+
+/* ---------- Recherche sur internet (Wikipédia, gratuit, sans clé) ---------- */
+let WEB=[];
+function timed(el,label){const t0=performance.now(),f=()=>{el.textContent=label+' · '+((performance.now()-t0)/1000).toFixed(1)+' s'};f();const id=setInterval(f,200);return()=>{clearInterval(id);return((performance.now()-t0)/1000).toFixed(1)}}
+async function wikiSearch(q,lang,suffix){
+  const u='https://'+lang+'.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch='+encodeURIComponent(q+' '+suffix)+'&gsrlimit=5&prop=pageimages|extracts&piprop=thumbnail&pithumbsize=700&exintro=1&explaintext=1&exchars=700&format=json&origin=*';
+  const j=await (await fetch(u)).json();
+  return Object.values((j.query&&j.query.pages)||{}).sort((a,b)=>a.index-b.index).map(p=>({titre:p.title,texte:p.extract||'',img:p.thumbnail&&p.thumbnail.source,url:'https://'+lang+'.wikipedia.org/?curid='+p.pageid}));
+}
+async function webSearch(){
+  const q=$('#wQ').value.trim(),msg=$('#wMsg');
+  if(!q)return msg.textContent='Écris le nom du jeu.';
+  if(!navigator.onLine)return msg.textContent='Pas de connexion internet.';
+  $('#btnWeb').disabled=true;$('#wRes').innerHTML='';
+  const stop=timed(msg,'Recherche en cours');
+  const r=await Promise.allSettled([wikiSearch(q,'fr','jeu de société'),wikiSearch(q,'en','board game')]);
+  const t=stop();
+  WEB=[].concat(...r.filter(x=>x.status==='fulfilled').map(x=>x.value));
+  const seen={};WEB=WEB.filter(x=>!seen[x.titre.toLowerCase()]&&(seen[x.titre.toLowerCase()]=1));
+  msg.textContent=WEB.length?WEB.length+' résultat(s) en '+t+' s. Choisis le bon jeu, puis ajoute-le au catalogue.':(r.every(x=>x.status==='rejected')?'Recherche impossible (connexion ou serveur indisponible).':'Aucun résultat en '+t+' s. Essaie un autre nom.');
+  $('#wRes').innerHTML=WEB.map((w,i)=>'<div class="row">'+(w.img?'<img alt="" src="'+esc(w.img)+'">':'<img alt="">')+'<div class="t"><b>'+esc(w.titre)+'</b><br><small>'+esc(w.texte.slice(0,160))+'…</small><br><small><a href="'+esc(w.url)+'" target="_blank" rel="noopener">Voir la page</a></small></div><button class="pri" data-w="'+i+'"'+(w.img?'':' disabled')+'>'+(w.img?'Ajouter':'Pas d’image')+'</button></div>').join('');
+  $('#btnWeb').disabled=false;
+}
+function loadUrl(u){return new Promise((res,rej)=>{const i=new Image();i.crossOrigin='anonymous';i.onload=()=>res(i);i.onerror=()=>rej(new Error('image inaccessible'));i.src=u})}
+async function addFromWeb(i){
+  const w=WEB[i],msg=$('#wMsg');
+  if(!ready)return msg.textContent='Les moteurs chargent encore (voir l’onglet Scanner).';
+  const stop=timed(msg,'Téléchargement et calcul de la signature');
+  await sleep(60);
+  try{
+    const c=fit(await loadUrl(w.img),600),f=features(c,1000);
+    if(f.des.rows<40){f.des.delete();stop();return msg.textContent='Image trop pauvre en détails (probablement un logo). Ajoute plutôt ce jeu avec ta propre photo de la boîte.'}
+    const th=document.createElement('canvas');th.width=th.height=50;
+    const s=Math.min(c.width,c.height);
+    th.getContext('2d').drawImage(c,(c.width-s)/2,(c.height-s)/2,s,s,0,0,50,50);
+    db.run('INSERT INTO jeux(nom,description,editeur_annee,signatures_orb,points,nb,dimensions_boite,miniature_boite) VALUES(?,?,?,?,?,?,?,?)',
+      [w.titre,w.texte+'\n\nSource : '+w.url+' (Wikipédia, licence CC BY-SA)','',new Uint8Array(f.des.data),new Uint8Array(f.pts.buffer),f.des.rows,c.width+'x'+c.height,th.toDataURL('image/jpeg',.6)]);
+    f.des.delete();await persist();loadGames();
+    msg.textContent='« '+w.titre+' » ajouté en '+stop()+' s. Teste-le dans Scanner : si la boîte n’est pas reconnue, remplace-le avec ta propre photo.';
+  }catch(e){stop();msg.textContent='Échec : '+e.message}
+}
+$('#btnWeb').onclick=webSearch;
+$('#wQ').addEventListener('keydown',e=>{if(e.key==='Enter')webSearch()});
+$('#wRes').onclick=e=>{if(e.target.dataset.w!==undefined)addFromWeb(+e.target.dataset.w)};
+$('#btnWebGo').onclick=()=>document.querySelector('[data-tab="web"]').click();
 
 hintMode();requestAnimationFrame(draw);setInterval(tick,300);
 startCam();   /* la caméra démarre sans attendre OpenCV */
