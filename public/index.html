@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#d6336c">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ludothèque</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--tx:#1d1d1b;--mu:#6b6a65;--ac:#d6336c;--bd:#e3e1da;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#17171a;--card:#232328;--tx:#f0efe9;--mu:#9d9ca5;--ac:#f06595;--bd:#35353c;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:640px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:24px;margin:0 0 14px}
+h2{font-size:17px;margin:22px 0 10px}
+.row{display:flex;gap:8px;margin-bottom:8px}
+input{flex:1;min-width:0;padding:12px;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--tx);font:inherit}
+button{padding:12px 14px;border:0;border-radius:10px;background:var(--ac);color:#fff;font:inherit;font-weight:600;cursor:pointer}
+button.alt{background:var(--card);color:var(--tx);border:1px solid var(--bd)}
+button:disabled{opacity:.5}
+#reader{margin:8px 0;border-radius:10px;overflow:hidden}
+#msg{min-height:22px;margin:8px 0;font-size:14px;color:var(--mu)}
+.list{display:flex;flex-direction:column;gap:8px}
+.it{display:flex;gap:12px;align-items:center;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:8px}
+.it img,.ph{width:48px;height:64px;object-fit:cover;border-radius:6px;background:var(--bd);flex:none}
+.it .t{flex:1;min-width:0}.it b{display:block;font-size:15px}.it small{color:var(--mu)}
+.it button{padding:8px 12px;font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+.g{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:4px}
+.g img,.g .ph{width:100%;height:150px}
+.g b{font-size:13px}.g small{color:var(--mu);font-size:12px}
+.g button{padding:6px;font-size:12px}
+.empty{color:var(--mu);font-size:14px}
+</style>
+</head>
+<body>
+<main>
+<h1>🎮 Ludothèque</h1>
+
+<div class="row">
+<input id="q" placeholder="Rechercher un titre (ex. Zelda)" autocomplete="off">
+<button id="sb">🔍</button>
+</div>
+<div class="row">
+<button id="scan" style="flex:1">📷 Code-barres</button>
+<button id="photo" style="flex:1">📸 Photo du jeu</button>
+<button id="gal" class="alt" title="Choisir depuis la galerie">🖼️</button>
+</div>
+<input id="f1" type="file" accept="image/*" capture="environment" hidden>
+<input id="f2" type="file" accept="image/*" hidden>
+<div id="reader" hidden></div>
+<div class="row"><input id="ean" inputmode="numeric" placeholder="Ou taper le code-barres"><button class="alt" id="go">OK</button></div>
+<div id="msg"></div>
+<div id="res" class="list"></div>
+
+<h2>Ma collection (<span id="n">0</span>)</h2>
+<div id="col" class="grid"></div>
+</main>
+
+<script src="html5-qrcode.min.js"></script>
+<script src="tess/tesseract.min.js"></script>
+<script>
+const K="ludotheque:v2";
+let own=[];try{own=JSON.parse(localStorage.getItem(K)||"[]")}catch(e){}
+const $=id=>document.getElementById(id);
+const save=()=>{try{localStorage.setItem(K,JSON.stringify(own))}catch(e){}};
+const say=t=>$("msg").textContent=t;
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const cov=g=>g.cover?`<img src="${esc(g.cover)}" alt="" loading="lazy">`:`<div class="ph"></div>`;
+
+async function api(url,opts){
+  const r=await fetch(url,opts);
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.error||("Erreur "+r.status));
+  return j;
+}
+function render(){
+  $("n").textContent=own.length;
+  $("col").innerHTML=own.length?own.map(g=>`<div class="g">${cov(g)}<b>${esc(g.name)}</b><small>${esc(g.platforms)}</small><button class="alt" data-r="${g.id}">Retirer</button></div>`).join(""):'<p class="empty">Aucun jeu pour l’instant.</p>';
+}
+let cands=[];
+function showCands(list){
+  cands=list;
+  $("res").innerHTML=list.map((g,i)=>`<div class="it">${cov(g)}<div class="t"><b>${esc(g.name)}</b><small>${esc(g.year||"")} ${esc(g.platforms)}</small></div><button data-a="${i}">Ajouter</button></div>`).join("");
+}
+$("res").onclick=e=>{
+  const i=e.target.dataset.a;if(i===undefined)return;
+  const g=cands[i];
+  if(own.some(x=>x.id===g.id)){say(g.name+" est déjà dans la collection.");return}
+  own.unshift(g);save();render();say("Ajouté : "+g.name);$("res").innerHTML="";
+};
+$("col").onclick=e=>{const r=e.target.dataset.r;if(r){own=own.filter(x=>String(x.id)!==r);save();render()}};
+
+async function search(){
+  const q=$("q").value.trim();if(!q)return;
+  say("Recherche…");
+  try{const j=await api("api/search?q="+encodeURIComponent(q));showCands(j.games);say(j.games.length?"Touchez « Ajouter » sur le bon jeu.":"Aucun résultat.")}
+  catch(e){say("Erreur : "+e.message)}
+}
+$("sb").onclick=search;$("q").onkeydown=e=>{if(e.key==="Enter")search()};
+
+async function byEan(code){
+  say("Code lu : "+code+". Recherche du jeu…");
+  try{
+    const j=await api("api/ean?code="+encodeURIComponent(code));
+    if(j.games.length){showCands(j.games);say("Code "+code+" → « "+j.title+" ». Choisissez le bon jeu.")}
+    else if(j.title){$("q").value=j.title;say("Code "+code+" reconnu comme « "+j.title+" » mais absent d’IGDB. Ajustez le titre et cherchez.")}
+    else say("Code "+code+" inconnu des bases de codes-barres. Essayez la photo du jeu ou la recherche par titre.");
+  }catch(e){say("Erreur : "+e.message)}
+}
+$("go").onclick=()=>{const v=$("ean").value.trim();if(v){byEan(v);$("ean").value=""}};
+$("ean").onkeydown=e=>{if(e.key==="Enter")$("go").click()};
+
+// Scanner
+let sc=null,busy=false;
+async function stop(){if(sc){try{await sc.stop()}catch(e){}try{sc.clear()}catch(e){}sc=null}$("reader").hidden=true;$("scan").textContent="📷 Code-barres"}
+$("scan").onclick=async()=>{
+  if(sc){stop();return}
+  if(typeof Html5Qrcode==="undefined"){say("Bibliothèque de scan non chargée.");return}
+  $("reader").hidden=false;$("scan").textContent="✖ Arrêter";say("Placez le code-barres bien à plat, avec de la lumière, à 10-15 cm.");
+  try{
+    const F=Html5QrcodeSupportedFormats;
+    sc=new Html5Qrcode("reader",{formatsToSupport:[F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E],experimentalFeatures:{useBarCodeDetector:true},verbose:false});
+    await sc.start({facingMode:"environment"},{fps:12,qrbox:(w,h)=>({width:Math.floor(w*.85),height:Math.floor(Math.min(h,w)*.4)}),aspectRatio:1.5,disableFlip:true,videoConstraints:{facingMode:"environment",width:{ideal:1920},height:{ideal:1080},focusMode:"continuous"}},
+      t=>{if(busy)return;busy=true;stop();byEan(t).finally(()=>busy=false)},()=>{});
+  }catch(e){sc=null;$("reader").hidden=true;$("scan").textContent="📷 Code-barres";say("Caméra inaccessible ("+(e&&e.message||e)+"). Vérifiez l’autorisation et le HTTPS, ou utilisez la photo.")}
+};
+
+// Photo : lecture du texte de la jaquette, directement dans le téléphone (gratuit, rien n'est envoyé)
+let worker=null;
+async function getWorker(){
+  if(worker)return worker;
+  worker=await Tesseract.createWorker("eng+fra",1,{workerPath:"tess/worker.min.js",corePath:"tess/",langPath:"tess/lang",gzip:true,
+    logger:m=>{if(m.status==="recognizing text")say("Lecture du texte… "+Math.round(m.progress*100)+" %");else if(m.status&&m.status.includes("loading"))say("Chargement du lecteur (première fois seulement)…")}});
+  return worker;
+}
+function prep(file){return new Promise((ok,ko)=>{const im=new Image();im.onload=()=>{const s=Math.min(1,1800/Math.max(im.width,im.height)),c=document.createElement("canvas");c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);const x=c.getContext("2d");x.filter="grayscale(1) contrast(1.4)";x.drawImage(im,0,0,c.width,c.height);ok(c)};im.onerror=ko;im.src=URL.createObjectURL(file)})}
+const clean=t=>t.replace(/[^\p{L}\p{N}:'’& -]/gu," ").replace(/\s+/g," ").trim();
+function queries(lines){
+  const L=lines.map(l=>({t:clean(l.text),h:l.bbox.y1-l.bbox.y0,c:l.confidence})).filter(l=>l.t.length>=3&&/\p{L}{3}/u.test(l.t)&&l.c>45).sort((a,b)=>b.h-a.h).slice(0,4);
+  const q=[];if(L[0])q.push(L[0].t);if(L[1]){q.push(L[0].t+" "+L[1].t);q.push(L[1].t)}if(L[2])q.push(L[2].t);
+  return [...new Set(q)];
+}
+async function onFile(e){
+  const f=e.target.files[0];e.target.value="";if(!f)return;
+  $("res").innerHTML="";say("Préparation de l’image…");
+  try{
+    const w=await getWorker();
+    const {data}=await w.recognize(await prep(f));
+    const qs=queries(data.lines||[]);
+    if(!qs.length){say("Je n’ai pas pu lire de titre. Cadrez la jaquette de face, bien éclairée, sans reflet.");return}
+    const seen=new Set(),all=[];
+    for(const q of qs){
+      try{const j=await api("api/search?q="+encodeURIComponent(q));for(const g of j.games)if(!seen.has(g.id)){seen.add(g.id);all.push(g)}}catch(err){say("Erreur : "+err.message);return}
+      if(all.length>=8)break;
+    }
+    $("q").value=qs[0];
+    if(all.length){showCands(all.slice(0,10));say("Texte lu : « "+qs[0]+" ». Choisissez le bon jeu, sinon corrigez le titre et cherchez.")}
+    else say("Texte lu : « "+qs[0]+" » mais aucun jeu trouvé. Corrigez le titre dans la barre et cherchez.");
+  }catch(err){say("Erreur de lecture : "+(err.message||err))}
+}
+$("photo").onclick=()=>$("f1").click();$("gal").onclick=()=>$("f2").click();
+$("f1").onchange=onFile;$("f2").onchange=onFile;
+
+render();
+if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body>
+</html>
