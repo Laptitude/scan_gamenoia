@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reconnaissance de Jeu sans IA (ORB & Homographie)</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 20px auto; padding: 0 10px; background: #f5f5f5; color: #333; }
+        .container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .images-preview { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
+        .box { border: 1px solid #ccc; padding: 10px; border-radius: 4px; background: #fafafa; }
+        img, canvas { max-width: 100%; height: auto; display: block; margin-top: 5px; }
+        button { background: #007bff; color: white; border: none; padding: 10px 15px; font-size: 16px; border-radius: 4px; cursor: pointer; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        #status { font-weight: bold; color: #d9534f; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Détection Géométrique (Zéro IA / Zéro Serveur)</h1>
+    <p>Ce modèle utilise <strong>OpenCV.js</strong> et l'algorithme <strong>ORB</strong> pour retrouver le jeu de référence dans la photo de l'utilisateur et dessiner un cadre géométrique autour.</p>
+    
+    <div id="status">Chargement d'OpenCV.js en cours... Veuillez patienter...</div>
+    
+    <div class="images-preview">
+        <!-- Image 1 : La jaquette témoin enregistrée dans votre base locale -->
+        <div class="box">
+            <h3>1. Jaquette de Référence (En Base)</h3>
+            <img id="imgReference" src="https://opencv.org" crossOrigin="anonymous" alt="Jeu à trouver">
+        </div>
+        
+        <!-- Image 2 : La photo prise par l'utilisateur (qui contient la jaquette au milieu d'autres choses) -->
+        <div class="box">
+            <h3>2. Photo de l'utilisateur (Lambda)</h3>
+            <img id="imgScene" src="https://opencv.org" crossOrigin="anonymous" alt="Photo prise">
+        </div>
+    </div>
+
+    <button id="btnCalculer" disabled onclick="detecterEtEncadrer()">Lancer la détection & dessiner le cadre</button>
+
+    <div class="box" style="margin-top: 20px;">
+        <h3>3. Résultat (Cadre rouge dessiné automatiquement sur l'objet)</h3>
+        <canvas id="canvasResultat"></canvas>
+    </div>
+</div>
+
+<!-- Chargement d'OpenCV.js depuis un CDN public et gratuit -->
+<script async src="https://opencv.org" type="text/javascript" onload="onOpenCvReady();"></script>
+
+<script>
+// Appelée automatiquement quand OpenCV.js a fini de charger
+function onOpenCvReady() {
+    document.getElementById('status').innerText = "✓ OpenCV.js est prêt ! Vous pouvez tester.";
+    document.getElementById('status').style.color = "green";
+    document.getElementById('btnCalculer').disabled = false;
+}
+
+function detecterEtEncadrer() {
+    document.getElementById('status').innerText = "Analyse géométrique en cours...";
+    document.getElementById('status').style.color = "#333";
+
+    // 1. Charger les éléments HTML dans des Matrices OpenCV (cv.Mat)
+    let imgRef = cv.imread('imgReference');
+    let imgScn = cv.imread('imgScene');
+    
+    let grisRef = new cv.Mat();
+    let grisScn = new cv.Mat();
+    
+    // Convertir en nuances de gris pour accélérer le calcul mathématique
+    cv.cvtColor(imgRef, grisRef, cv.COLOR_RGBA2GRAY);
+    cv.cvtColor(imgScn, grisScn, cv.COLOR_RGBA2GRAY);
+
+    // 2. Initialiser le détecteur de points clés ORB (sans IA)
+    let orb = new cv.ORB();
+    let pointsClesRef = new cv.KeyPointVector();
+    let pointsClesScn = new cv.KeyPointVector();
+    let descripteursRef = new cv.Mat();
+    let descripteursScn = new cv.Mat();
+
+    // Trouver les points d'intérêt uniques et calculer leurs signatures mathématiques
+    orb.detectAndCompute(grisRef, new cv.Mat(), pointsClesRef, descripteursRef);
+    orb.detectAndCompute(grisScn, new cv.Mat(), pointsClesScn, descripteursScn);
+
+    // 3. Comparer les signatures (Matcher) à la recherche de correspondances
+    let matcher = new cv.BFMatcher(cv.NORM_HAMMING, true);
+    let correspondances = new cv.DMatchVector();
+    matcher.match(descripteursRef, descripteursScn, correspondances);
+
+    // Tri des correspondances pour ne garder que les points les plus robustes
+    let listeCorrespondances = [];
+    for (let i = 0; i < correspondances.size(); ++i) {
+        listeCorrespondances.push(correspondances.get(i));
+    }
+    listeCorrespondances.sort((a, b) => a.distance - b.distance);
+
+    // Créer un vecteur OpenCV avec uniquement les 30 meilleures correspondances géométriques
+    let meilleuresCorrespondances = new cv.DMatchVector();
+    for (let i = 0; i < Math.min(30, listeCorrespondances.length); ++i) {
+        meilleuresCorrespondances.push_back(listeCorrespondances[i]);
+    }
+
+    // 4. Extraire les coordonnées physiques des points d'intérêt pour calculer l'emplacement
+    let pointsPointsRef = [];
+    let pointsPointsScn = [];
+    for (let i = 0; i < meilleuresCorrespondances.size(); ++i) {
+        let m = meilleuresCorrespondances.get(i);
+        let pRef = pointsClesRef.get(m.queryIdx).pt;
+        let pScn = pointsClesScn.get(m.trainIdx).pt;
+        pointsPointsRef.push(pRef.x, pRef.y);
+        pointsPointsScn.push(pScn.x, pScn.y);
+    }
+
+    // Convertir les coordonnées en matrices OpenCV requises pour l'homographie
+    let matPointsRef = cv.matFromArray(pointsPointsRef.length / 2, 1, cv.CV_32FC2, pointsPointsRef);
+    let matPointsScn = cv.matFromArray(pointsPointsScn.length / 2, 1, cv.CV_32FC2, pointsPointsScn);
+
+    // 5. Calculer la matrice d'Homographie (géométrie de la perspective)
+    let masque = new cv.Mat();
+    let H = cv.findHomography(matPointsRef, matPointsScn, cv.RANSAC, 5.0, masque);
+
+    // Définir les 4 coins de l'image de référence d'origine
+    let coinsRef = cv.matFromArray(4, 1, cv.CV_32FC2, [
+        0, 0,
+        imgRef.cols, 0,
+        imgRef.cols, imgRef.rows,
+        0, imgRef.rows
+    ]);
+    
+    let coinsScn = new cv.Mat();
+
+    // Projeter mathématiquement ces 4 coins sur la photo de l'utilisateur grâce à H
+    cv.perspectiveTransform(coinsRef, coinsScn, H);
+
+    // 6. Dessiner le résultat final
+    // On duplique l'image de la scène pour dessiner le cadre rouge dessus
+    let imageFinale = imgScn.clone();
+    let couleurCadre = new cv.Scalar(255, 0, 0, 255); // Rouge (RGBA)
+    let epaisseurLigne = 4;
+
+    // Relier les 4 points projetés pour former le rectangle fermé autour du jeu trouvé
+    for (let i = 0; i < 4; i++) {
+        let pt1 = { x: coinsScn.data32F[i * 2], y: coinsScn.data32F[i * 2 + 1] };
+        let nextIndex = (i + 1) % 4;
+        let pt2 = { x: coinsScn.data32F[nextIndex * 2], y: coinsScn.data32F[nextIndex * 2 + 1] };
+        cv.line(imageFinale, pt1, pt2, couleurCadre, epaisseurLigne);
+    }
+
+    // Afficher l'image finale dotée de son cadre dans le Canvas HTML
+    cv.imshow('canvasResultat', imageFinale);
+
+    // Nettoyage obligatoire de la mémoire (OpenCV.js ne gère pas le garbage collector automatiquement)
+    imgRef.delete(); imgScn.delete(); grisRef.delete(); grisScn.delete();
+    orb.delete(); pointsClesRef.delete(); pointsClesScn.delete();
+    descripteursRef.delete(); descripteursScn.delete(); matcher.delete();
+    correspondances.delete(); meilleuresCorrespondances.delete();
+    matPointsRef.delete(); matPointsScn.delete(); H.delete(); masque.delete();
+    coinsRef.delete(); coinsScn.delete(); imageFinale.delete();
+
+    document.getElementById('status').innerText = "✓ Cadre dessiné géométriquement avec succès !";
+    document.getElementById('status').style.color = "green";
+}
+</script>
+
+</body>
+</html>
