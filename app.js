@@ -1,19 +1,20 @@
-// 1. Utilisation du CDN esm.sh, totalement compatible CORS et optimisé pour le navigateur
-import { pipeline, env } from 'https://esm.sh';
+// Utilisation de la version moderne officielle v4 stabilisée
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.1';
 
-// Configuration stricte pour les modèles distants
+// Forcer la configuration pour le web
 env.allowLocalModels = false;
-env.remoteObjectURL = 'https://huggingface.co';
+env.useBrowserCache = false; 
 
 let visionPipeline = null;
 let databaseIndex = [];
-// 2. Initialiser le modèle d'IA au démarrage
+
 export async function initIA(onStatusUpdate) {
     try {
-        onStatusUpdate("Connexion aux serveurs d'IA... (Téléchargement du modèle)");
+        onStatusUpdate("Téléchargement du moteur d'IA visuelle...");
         
-        // Chargement du modèle de vision CLIP avec suivi du pourcentage
-        visionPipeline = await pipeline('feature-extraction', 'Xenova/clip-vit-base-patch32', {
+        // Chargement du modèle CLIP optimisé
+        visionPipeline = await pipeline('feature-extraction', 'onnx-community/clip-vit-base-patch32', {
+            device: 'wasm',
             progress_callback: (progress) => {
                 if (progress.status === 'downloading') {
                     onStatusUpdate(`Téléchargement de l'IA : ${Math.round(progress.loaded / progress.total * 100)}%`);
@@ -24,21 +25,20 @@ export async function initIA(onStatusUpdate) {
         onStatusUpdate("Chargement de la base de données locale...");
         await loadDatabase();
         
-        onStatusUpdate("Prêt ! Déposez une image.", false);
+        onStatusUpdate("Prêt ! Ajoutez ou glissez une photo.", false);
     } catch (error) {
-        console.error("Détail de l'erreur :", error);
-        onStatusUpdate("⚠️ Échec de connexion ou blocage réseau.", false);
+        console.error("Détail :", error);
+        onStatusUpdate("⚠️ Erreur : Impossible de démarrer l'IA. Vérifiez votre connexion.", false);
     }
 }
 
-// 3. Charger la base de données des signatures de jeux
 async function loadDatabase() {
     try {
         const response = await fetch('./jeux_embeddings.json');
-        if (!response.ok) throw new Error("Fichier jeux_embeddings.json introuvable.");
+        if (!response.ok) throw new Error();
         databaseIndex = await response.json();
     } catch (e) {
-        console.warn("Fichier JSON non trouvé. Utilisation de données de test.");
+        console.warn("Utilisation des données de test.");
         databaseIndex = [
             { nom: "Minecraft", vecteur: new Array(512).fill(0.01) },
             { nom: "GTA V", vecteur: new Array(512).fill(0.05) },
@@ -47,11 +47,8 @@ async function loadDatabase() {
     }
 }
 
-// 4. Calcul de similarité cosinus
 function cosineSimilarity(vecA, vecB) {
-    let dotProduct = 0.0;
-    let normA = 0.0;
-    let normB = 0.0;
+    let dotProduct = 0.0, normA = 0.0, normB = 0.0;
     for (let i = 0; i < vecA.length; i++) {
         dotProduct += vecA[i] * vecB[i];
         normA += vecA[i] * vecA[i];
@@ -60,22 +57,18 @@ function cosineSimilarity(vecA, vecB) {
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-// 5. Analyser la photo de l'utilisateur
 export async function analyserImage(imageSrc, onStatusUpdate) {
     if (!visionPipeline) return null;
-    
-    onStatusUpdate("Analyse des pixels et extraction de la signature...");
-    
+    onStatusUpdate("Analyse des pixels...");
     const output = await visionPipeline(imageSrc);
     const userVector = Array.from(output.data);
 
-    onStatusUpdate("Comparaison instantanée avec la base de données...");
-    
-    const resultats = databaseIndex.map(jeu => {
-        const score = cosineSimilarity(userVector, jeu.vecteur);
-        return { nom: jeu.nom, score: score };
-    });
+    onStatusUpdate("Comparaison avec la base de données...");
+    const resultats = databaseIndex.map(jeu => ({
+        nom: jeu.nom,
+        score: cosineSimilarity(userVector, jeu.vecteur)
+    }));
 
     resultats.sort((a, b) => b.score - a.score);
-    return resultats.slice(0, 3); // Retourne le Top 3
+    return resultats.slice(0, 3);
 }
